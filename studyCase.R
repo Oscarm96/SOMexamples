@@ -4,11 +4,12 @@ require(spatstat)
 require(mvtnorm)
 require(graphics)
 require(rgl)
-source('coolBlueHotRed.R')
+source('coolBlueHotRed.R') # Retrieved from https://github.com/shanealynn/Kohonen-Self-organising-maps-in-R/blob/master/coolBlueHotRed.R
 
+# Read dats
 data <- read.csv(file = "datalimpia.csv", head = TRUE, sep = ",")
 
-# Atributos jugadores
+# Players skills
 features <- c( 'Crossing', 'Finishing', 'ShortPassing',
                    'Dribbling', 'LongPassing', 'BallControl',
                    'Acceleration', 'SprintSpeed', 'Agility', 'Reactions', 'Balance',
@@ -17,8 +18,7 @@ features <- c( 'Crossing', 'Finishing', 'ShortPassing',
                    'SlidingTackle')
 
 
-
-position <- c('Position_Cat')
+# Subset of player skills
 features_short <- c('Crossing', 'Finishing', 'ShortPassing',
               'Dribbling', 'LongPassing', 'BallControl',
               'Acceleration', 'SprintSpeed', 'Agility', 'Reactions',
@@ -26,6 +26,9 @@ features_short <- c('Crossing', 'Finishing', 'ShortPassing',
               'Positioning', 'Vision', 'Composure', 'StandingTackle',
               'SlidingTackle')
 
+position <- c('Position_Cat') # name of target variable (simplified field position)
+
+# Spanish to english translation
 data$Position_Cat <- as.character(data$Position_Cat)
 data$Position_Cat[data$Position_Cat == "Delantero"] <- "Forward"
 data$Position_Cat[data$Position_Cat == "Centrocampista"] <- "Midfielder"
@@ -35,13 +38,13 @@ data$Position_Cat <- factor(data$Position_Cat,  c("Forward", "Midfielder", "Defe
 
 lv <- levels(data$Position_Cat)
 
-# Division de dataset original: solo jugadores de campo y con puntuacion global mayor de 75
+
+# Dataset division: only field players (no goalkeepers) with overall rating > 75
 data1 <- subset(data, subset = Position_Cat != 'Goalkeeper' & Overall > 75)
-# Datos con atributos seleccionados
+# Data division with selected short features
 X <- data1[features_short]
 
-# Crear los conjuntos de train y set
-
+# Train and test sets creation
 n <- nrow(X)
 index_train <- sample(x = n, size = 1000)
 
@@ -49,10 +52,11 @@ X_train <- X[index_train,]
 
 X_test <- X[-index_train,]
 
-# Etiquetas de train y test por separado (por conflitos de tipos de datos en la función superosm)
+# Separation of train and test class labels (data types conflicts when using supersom class)
 labels_train <- as.factor(data1[index_train,position])
 labels_test <- as.factor(data1[-index_train,position])
 
+# Data normalization
 Xtraindata <- scale(X_train)
 trainingdata <- list(feat = Xtraindata, labels = labels_train)
 
@@ -60,15 +64,15 @@ Xtestdata <- scale(X_test, center = attr(Xtraindata,  "scaled:center"), scale = 
 testdata <- list(features = Xtestdata, labels = labels_test)
 
 
-# Modelo
-par(mfrow = c(1,1) ,cex.main= 0.7)
+# CLASSIFICATION PART 1
 
 mygrid<- somgrid(20,20,"rectangular")
 
+# Supervised SOM object
 data.som1 <- xyf(trainingdata[[1]],trainingdata[[2]], grid = mygrid, rlen= 250)
 
-# Mapping Plot
-png(paste0("fig_", "mapping", ".png"), width = 7, height = 7, units = "in", res = 200)
+# Mapping Plot of train data
+png(paste0("fig_", "mapping", ".png"), width = 7, height = 7, units = "in", res = 200) #save image as png
 plot(data.som1, type = "mapping", col = rainbow(3)[labels_train], keepMargins = TRUE )
 legend("topleft", legend = lv[c(TRUE, TRUE, TRUE, FALSE)], text.col = rainbow(3), 
        inset = c(-0.02, 0))
@@ -93,20 +97,19 @@ dev.off()
 png(paste0("fig_", "quality", ".png"), width = 7, height = 7, units = "in", res = 200)
 plot(data.som1, type = "quality", palette.name=terrain.colors, main = "Quality plot (C)", keepMargins = TRUE, shape = "straight")
 dev.off()
-
-# Predicción de datos de test y matriz de confusión
+# Class predictions for test and confusion matrix
 som.prediction <- predict(data.som1, newdata = testdata,  whatmap = 1)
 table(testdata[[2]], som.prediction$predictions[[2]], useNA = 'always')
 
-#Mapeo de datos de train y mapping plot con predicciones
-bgcols<- c("darkred", "darkgreen", "darkblue")
+# Mapping plot for test data with predictions
+bgcols<- c("darkred", "darkgreen", "darkblue") # color list for predicted classes
 
 mapping <- map(data.som1, newdata= testdata, whatmap = 1)
 mapping_lab <- map(data.som1, newdata= testdata, whatmap = 2)
 
 plot(data.som1, type = "mapping",main = "Mapping plot for test data ",classif = mapping_lab$unit.classif, col = rainbow(3)[as.integer(testdata[[2]])], bgcol = bgcols[classmat2classvec(som.prediction$unit.predictions[[2]])])
 
-
+# UNDERSTANDING DATA (property maps)
 par(mfrow = c(1,1) ,cex.main= 0.7)
 plot(data.som1, type = "property", property = getCodes(data.som1,1 )[,1], main = colnames(X[1]), palette.name = coolBlueHotRed )
 plot(data.som1, type = "property", property = getCodes(data.som1,1 )[,2], main = colnames(X[2]), palette.name = coolBlueHotRed )
@@ -137,70 +140,111 @@ for (i in 1:19) {
   
 }
 
-## CLASSIFICATION
-data1 <- subset(data, subset = Position_Cat != 'Goalkeeper' & Overall > 75)
-data1$Position_Cat <- factor(data1$Position_Cat,  c("Forward", "Midfielder", "Defender", "Goalkeeper"))
-
-# Datos con atributos seleccionados
-X1 <- data1[features]
-
-# Crear los conjuntos de train y set
-
-n1 <- nrow(X1)
-index_train1 <- sample(x = n1, size = 1000 )
-
-X1_train <- X[index_train1,]
-
-X1_test <- X[-index_train1,]
-
-# Etiquetas de train y test por separado (por conflitos de tipos de datos en la función superosm)
-labels_train1 <- as.factor(data1[index_train1,position])
-labels_test1 <- as.factor(data1[-index_train1,position])
-
-X1traindata <- scale(X1_train)
-trainingdata1 <- list(feat = X1traindata, labels = labels_train1)
-
-X1testdata <- scale(X1_test, center = attr(X1traindata,  "scaled:center"), scale = attr(X1traindata, "scaled:scale"))
-testdata1 <- list(features = X1testdata, labels = labels_test1)
+## CLASSIFICATION PART 2
 
 
-# Modelo
-par(mfrow = c(1,1) ,cex.main= 0.7)
+data2<- read.csv(file = "datalimpia.csv", head = TRUE, sep = ",")
 
-mygrid<- somgrid(20,20,"rectangular")
+# players skills 
+features <- c( 'Finishing', 
+               'Dribbling',  'BallControl',
+               'Interceptions',
+               'Positioning', 'StandingTackle')
 
-data.som2 <- xyf(trainingdata1[[1]],trainingdata1[[2]], grid = mygrid)
 
-# Mapping Plot
 
-plot(data.som2, type = "mapping", col = rainbow(3)[labels_train1], keepMargins = TRUE )
-legend("topleft", legend = lv[c(TRUE, TRUE, TRUE, FALSE)], text.col = rainbow(3), 
+position <- c('Position_Cat')
+features_short <- c('Crossing', 'Finishing', 'ShortPassing',
+                    'Dribbling', 'LongPassing', 'BallControl',
+                    'Acceleration', 'SprintSpeed', 'Agility', 'Reactions',
+                    'Jumping', 'Stamina', 'Strength',  'Interceptions',
+                    'Positioning', 'Vision', 'Composure', 'StandingTackle',
+                    'SlidingTackle')
+
+
+# Create new classes depending of soccer position
+data2$Position_Cat <- as.character(data2$Position_Cat)
+data2$Position_Cat[data2$Position_Cat == "Delantero"] <- "Forward"
+data2$Position_Cat[data2$Position == "RCM"] <- "Neutral Midfielder"
+data2$Position_Cat[data2$Position == "LCM"] <- "Neutral Midfielder"
+data2$Position_Cat[data2$Position == "LDM"] <- "Defensive Midfielder"
+data2$Position_Cat[data2$Position == "CAM"] <- "Attacking Midfielder"
+data2$Position_Cat[data2$Position == "CDM"] <- "Defensive Midfielder"
+data2$Position_Cat[data2$Position == "RM"] <- "Neutral Midfielder"
+data2$Position_Cat[data2$Position == "LM"] <- "Neutral Midfielder"
+data2$Position_Cat[data2$Position == "LAM"] <- "Attacking Midfielder"
+data2$Position_Cat[data2$Position == "RAM"] <- "Attacking Midfielder"
+data2$Position_Cat[data2$Position == "RDM"] <- "Neutral Midfielder"
+data2$Position_Cat[data2$Position == "CM"] <- "Neutral Midfielder"
+data2$Position_Cat[data2$Position_Cat == "Defensa"] <- "Defender"
+data2$Position_Cat[data2$Position_Cat == "Portero"] <- "Goalkeeper"
+data2$Position_Cat <- factor(data2$Position_Cat,  c("Forward", "Attacking Midfielder", "Neutral Midfielder", "Defensive Midfielder","Defender", "Goalkeeper"))
+
+lv <- levels(data2$Position_Cat)
+
+# Dataset division: only field players (no goalkeepers) with overall rating > 75
+data12 <- subset(data2, subset = Position_Cat != 'Goalkeeper' & Overall > 70)
+# Data division with selected short features
+X2 <- data12[features_short]
+
+# Train and test sets creation
+n2 <- nrow(X2)
+index_train2 <- sample(x = n2, size = 3000 )
+
+X2_train <- X2[index_train2,]
+
+X2_test <- X2[-index_train2,]
+
+# Separation of train and test class labels (data types conflicts when using supersom class)
+labels_train2 <- as.factor(data12[index_train2,position])
+labels_test2 <- as.factor(data12[-index_train2,position])
+
+# Data normalization
+X2traindata <- scale(X2_train)
+trainingdata2 <- list(feat = X2traindata, labels = labels_train2)
+
+X2testdata <- scale(X2_test, center = attr(X2traindata,  "scaled:center"), scale = attr(X2traindata, "scaled:scale"))
+testdata2 <- list(features = X2testdata, labels = labels_test2)
+
+
+# MODEL
+
+mygrid<- somgrid(25,25,"rectangular")
+
+# Supervised SOM object
+data2.som2 <- xyf(trainingdata2[[1]],trainingdata2[[2]], grid = mygrid)
+
+# Mapping Plot for train data
+png(paste0("fig_", "map2", ".png"), width = 7, height = 7, units = "in", res = 200) #save image as png
+plot(data2.som2, type = "mapping", col = rainbow(5)[labels_train2], keepMargins = TRUE )
+legend("topright", legend = lv[c(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE)], text.col = rainbow(5), 
        inset = c(-0.02, 0))
+dev.off()
 # U-Matrix
-plot(data.som2, type = "dist.neighbours", palette.name=terrain.colors, main = "U-Matrix", keepMargins = TRUE, shape = "straight")
+plot(data2.som2, type = "dist.neighbours", palette.name=terrain.colors, main = "U-Matrix", keepMargins = TRUE, shape = "straight")
 # Code plot
-
-plot(data.som2, type = "codes", palette.name=terrain.colors, main = "Codes Map", keepMargins = TRUE, shape = "straight")
+plot(data2.som2, type = "codes", palette.name=terrain.colors, main = "Codes Map", keepMargins = TRUE, shape = "straight")
 # Counts plot
-
-plot(data.som2, type = "counts", palette.name=terrain.colors, main = "Count map", keepMargins = TRUE, shape = "straight")
+plot(data2.som2, type = "counts", palette.name=terrain.colors, main = "Count map", keepMargins = TRUE, shape = "straight")
 # Changes plot
-plot(data.som2, type = "changes",palette.name=terrain.colors, main = "Changes plot (D)", keepMargins = TRUE, shape = "straight")
+plot(data2.som2, type = "changes",palette.name=terrain.colors, main = "Changes plot (D)", keepMargins = TRUE, shape = "straight")
 # Quality plot
-plot(data.som2, type = "quality", palette.name=terrain.colors, main = "Quality plot (G)", keepMargins = TRUE, shape = "straight")
+plot(data2.som2, type = "quality", palette.name=terrain.colors, main = "Quality plot (G)", keepMargins = TRUE, shape = "straight")
 
 
-# Predicción de datos de test y matriz de confusión
-som.prediction <- predict(data.som2, newdata = testdata1,  whatmap = 1)
-table(testdata1[[2]], som.prediction$predictions[[2]], useNA = 'always')
+# Class prediction for test data and confusion matrix
+som.prediction <- predict(data2.som2, newdata = testdata2[[1]],  whatmap = 1)
+table(testdata2[[2]], som.prediction$predictions[[2]], useNA = 'always')
 
-#Mapeo de datos de train y mapping plot con predicciones
-bgcols<- c("darkred", "darkgreen", "darkblue")
+# Mapping plot for test data with predictions
+bgcols<- c("darkred", "darkgreen", "darkolivegreen","darkblue", "darkorchid3") # color list for predicted classes
 
-mapping <- map(data.som2, newdata= testdata1, whatmap = 1)
-mapping_lab <- map(data.som2, newdata= testdata1, whatmap = 2)
-
-plot(data.som2, type = "mapping",main = "Mapping plot for test data ",classif = mapping$unit.classif, col = rainbow(3)[as.integer(testdata1[[2]])], bgcol = bgcols[classmat2classvec(som.prediction$unit.predictions[[2]])])
+mapping <- map(data2.som2, newdata= testdata2, whatmap = 1) # features layer
+mapping_lab <- map(data2.som2, newdata= testdata2, whatmap = 2) # target variable layer
 
 
-
+png(paste0("fig_", "maptest2", ".png"), width = 7, height = 7, units = "in", res = 200)
+plot(data2.som2, type = "mapping",main = "Mapping plot for test data ",classif = mapping_lab$unit.classif, col = rainbow(5)[as.integer(testdata2[[2]])], bgcol = bgcols[classmat2classvec(som.prediction$unit.predictions[[2]])])
+legend("bottomleft", title = "True labels", title.col = "black",legend = lv[c(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE)], text.col = rainbow(5), bty = "o")
+legend("topleft", title = "Predictions",title.col = "black",legend = lv[c(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE)], text.col = bgcols, )
+dev.off()
